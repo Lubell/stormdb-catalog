@@ -1,0 +1,4 @@
+project_id,name,responsible,start_date,n_subjects,description
+101,MEG_vision,A. Researcher,2015-01-10,24,MEG and MRI study of visual gamma oscillations in V1.
+102,old_audio,B. Researcher,2010-03-01,12,Auditory mismatch negativity in healthy adults.
+103,pd_motor,C. Researcher,2018-05-05,,Finger tapping in Parkinson patients.

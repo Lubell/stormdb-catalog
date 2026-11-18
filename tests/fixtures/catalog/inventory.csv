@@ -1,0 +1,4 @@
+name,modalities,n_subjects_with_data,n_series,n_subj_MEG,n_subj_MR,n_subj_MEG_and_MR,series_names
+MEG_vision,MEG|MR,3,5,2,2,1,"{}"
+old_audio,MEG,10,20,10,,0,"{}"
+pd_motor,MR,4,8,,4,0,"{}"

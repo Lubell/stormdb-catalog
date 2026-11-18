@@ -1,0 +1,16 @@
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Pipeline output: contains real StormDb project metadata (PIs, descriptions)
+/catalog/
+
+# Never commit credentials
+.stormdblogin
+.env

@@ -1,0 +1,5 @@
+path:/projects/MEG_vision/raw/0001/20150101_000000/MEG/001.rest_raw/files$type:MEG
+path:/projects/MEG_vision/raw/0001/20150101_000000/MEG/002.gamma_raw/files$type:MEG
+path:/projects/MEG_vision/raw/0001/20150102_000000/MR/005.t1_mprage_3D_sag/files$type:MR
+path:/projects/MEG_vision/raw/0002/20150103_000000/MEG/001.emptyroom/files$type:MEG
+subjectcode:9999_XYZ$path:/projects/MEG_vision/raw/0003_ABC/20150104_000000/MR/003.t1_mprage_3D_sag/files
