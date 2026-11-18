@@ -43,7 +43,7 @@ import argparse
 import os
 from pathlib import Path
 
-from . import inventory, projects, query, tagging
+from . import inventory, projects, query, sync, tagging
 from .config import DEFAULT_LOGIN_FILE, EXTRACT_URL
 from .extract import run_login
 
@@ -81,6 +81,23 @@ def build_parser():
     )
     ch.add_argument("--cookie", default=os.environ.get("STORMDB_COOKIE"))
     ch.set_defaults(func=projects.run_changes)
+
+    sy = sub.add_parser(
+        "sync",
+        help="update the catalog, refetching only projects whose list row changed",
+    )
+    sy.add_argument("--cookie", default=os.environ.get("STORMDB_COOKIE"))
+    sy.add_argument("--login-file", default=DEFAULT_LOGIN_FILE)
+    sy.add_argument("--extract-url", default=EXTRACT_URL)
+    sy.add_argument(
+        "--all-info",
+        action="store_true",
+        help="also refetch every info page (~2 min) to catch edits not shown in the list",
+    )
+    sy.add_argument(
+        "--no-tag", action="store_true", help="skip rerunning keyword tagging"
+    )
+    sy.set_defaults(func=sync.run)
 
     b = sub.add_parser(
         "inventory", help="stage 2: series per project from the extract API"

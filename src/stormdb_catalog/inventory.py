@@ -35,32 +35,40 @@ def summarize(project_name, series):
     return row
 
 
+SERIES_COLUMNS = [
+    "project",
+    "subjectcode",
+    "study",
+    "modality",
+    "serieno",
+    "seriename",
+    "path",
+]
+
+
+def inventory_project(name, login_code, extract_url):
+    """Fetch one project's series; returns (series rows, inventory row). Errors go in the row."""
+    try:
+        ser = fetch_series(name, login_code, extract_url)
+    except Exception as e:  # noqa: BLE001 - record per-project failure, keep going
+        return [], {"name": name, "inventory_error": str(e)[:200]}
+    for s in ser:
+        s["project"] = name
+    return ser, summarize(name, ser)
+
+
 def run(args):
     projects = pd.read_csv(args.out / "projects.csv")
     login = read_login_code(args.login_file)
     all_series, inv = [], []
     for i, name in enumerate(projects["name"], 1):
-        try:
-            ser = fetch_series(name, login, args.extract_url)
-            for s in ser:
-                s["project"] = name
-            all_series += ser
-            inv.append(summarize(name, ser))
-        except Exception as e:  # noqa: BLE001 - record per-project failure, keep going
-            inv.append({"name": name, "inventory_error": str(e)[:200]})
+        ser, row = inventory_project(name, login, args.extract_url)
+        all_series += ser
+        inv.append(row)
         if i % 25 == 0:
             print(f"  {i}/{len(projects)}")
         time.sleep(args.delay)
-    keep = [
-        "project",
-        "subjectcode",
-        "study",
-        "modality",
-        "serieno",
-        "seriename",
-        "path",
-    ]
-    pd.DataFrame(all_series).reindex(columns=keep).to_csv(
+    pd.DataFrame(all_series).reindex(columns=SERIES_COLUMNS).to_csv(
         args.out / "series.csv", index=False
     )
     pd.DataFrame(inv).to_csv(args.out / "inventory.csv", index=False)

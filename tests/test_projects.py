@@ -131,9 +131,9 @@ def test_compare_project_lists(fixtures):
     assert [r["project_id"] for r in diff["removed"]] == [103]
     [(row, diffs)] = diff["changed"]
     assert row["project_id"] == 102
-    assert diffs == [("Human data", "Yes", "No (anonymized)")]
+    assert diffs == [("Personal data", "Yes", "No (anonymized)")]
     out = format_changes(diff)
-    assert "Human data: 'Yes' -> 'No (anonymized)'" in out
+    assert "Personal data: 'Yes' -> 'No (anonymized)'" in out
     assert "105  new_proj" in out and "103  pd_motor" in out
 
 
@@ -143,7 +143,7 @@ def test_compare_project_lists_labels_without_header(fixtures):
     diff = compare_project_lists(
         stored, parse_project_list(_anonymize_102_add_105_drop_103(html))
     )
-    assert diff["changed"][0][1] == [("Human data", "Yes", "No (anonymized)")]
+    assert diff["changed"][0][1] == [("Personal data", "Yes", "No (anonymized)")]
 
 
 def test_compare_project_lists_no_changes(fixtures):

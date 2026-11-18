@@ -81,7 +81,7 @@ LIST_COLUMN_FALLBACK = {
     5: "Start",
     6: "End",
     12: "Latest activity",
-    13: "Human data",
+    13: "Personal data",
     14: "Approvals",
 }
 
@@ -197,6 +197,19 @@ def parse_project_info(html):
     return out
 
 
+def fetch_info(s, p):
+    """Add a project's info-page fields to the list row p (in place); errors go to info_error."""
+    try:
+        ri = s.get(INFO_URL.format(pid=p["project_id"]), timeout=60)
+        ri.raise_for_status()
+        if is_login_page(ri.text):
+            raise RuntimeError("got the login page (session expired?)")
+        p.update(parse_project_info(ri.text))
+    except Exception as e:  # noqa: BLE001 - record per-project failure, keep going
+        p["info_error"] = str(e)
+    return p
+
+
 def fetch_project_list(s, out):
     """Fetch and parse the admin project list; returns (rows, header)."""
     r = s.get(LIST_URL, timeout=60)
@@ -232,14 +245,7 @@ def run(args):
     projects, _ = fetch_project_list(s, args.out)
     print(f"{len(projects)} projects in list; fetching info pages...")
     for i, p in enumerate(projects, 1):
-        try:
-            ri = s.get(INFO_URL.format(pid=p["project_id"]), timeout=60)
-            ri.raise_for_status()
-            if is_login_page(ri.text):
-                raise RuntimeError("got the login page (session expired?)")
-            p.update(parse_project_info(ri.text))
-        except Exception as e:  # noqa: BLE001 - record per-project failure, keep going
-            p["info_error"] = str(e)
+        fetch_info(s, p)
         if i % 50 == 0:
             print(f"  {i}/{len(projects)}")
         time.sleep(args.delay)

@@ -9,7 +9,7 @@ build/
 *.egg-info/
 
 # Pipeline output: contains real StormDb project metadata (PIs, descriptions)
-/catalog/
+/catalog*/
 
 # Never commit credentials
 .stormdblogin
