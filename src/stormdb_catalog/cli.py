@@ -65,6 +65,11 @@ def build_parser():
     lg.add_argument(
         "--force", action="store_true", help="replace an existing login file"
     )
+    lg.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="read the password from the first line of stdin instead of prompting",
+    )
     lg.set_defaults(func=run_login, needs_out=False)
 
     a = sub.add_parser("projects", help="stage 1: scrape project list and info pages")

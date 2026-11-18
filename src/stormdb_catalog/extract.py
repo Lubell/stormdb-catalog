@@ -49,12 +49,27 @@ def login(user, password, extract_url, login_file=DEFAULT_LOGIN_FILE, force=Fals
     return p
 
 
+def read_password(user, from_stdin=False):
+    """Read the password from the first line of stdin, or prompt for it on a terminal."""
+    if from_stdin:
+        password = sys.stdin.readline().rstrip("\r\n")
+        if not password:
+            sys.exit("No password received on stdin.")
+        return password
+    if not sys.stdin.isatty():
+        sys.exit(
+            "login needs a terminal to prompt for the password. Run it in a terminal, "
+            "or pipe the password in with --password-stdin."
+        )
+    return getpass.getpass(f'StormDb password for "{user}": ')
+
+
 def run_login(args):
     p = Path(args.login_file).expanduser()
     if p.exists() and not args.force:
         sys.exit(f"{p} already exists; use --force to replace it.")
     user = args.user or getpass.getuser()
-    password = getpass.getpass(f'StormDb password for "{user}": ')
+    password = read_password(user, args.password_stdin)
     try:
         p = login(user, password, args.extract_url, p, force=args.force)
     except LoginError as e:

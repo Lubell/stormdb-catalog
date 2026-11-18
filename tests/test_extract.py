@@ -1,3 +1,4 @@
+import io
 import stat
 from types import SimpleNamespace
 
@@ -121,16 +122,22 @@ def test_login_force_replaces_readonly_file(fake_get, tmp_path):
     assert stat.S_IMODE(p.stat().st_mode) == 0o400
 
 
-def _args(tmp_path, force=False):
+def _args(tmp_path, force=False, password_stdin=False):
     return SimpleNamespace(
         user="alice",
         login_file=str(tmp_path / "loginfile"),
         extract_url=URL,
         force=force,
+        password_stdin=password_stdin,
     )
 
 
-def test_run_login_never_prints_password(fake_get, tmp_path, monkeypatch, capsys):
+@pytest.fixture
+def tty(monkeypatch):
+    monkeypatch.setattr(extract.sys.stdin, "isatty", lambda: True)
+
+
+def test_run_login_never_prints_password(fake_get, tmp_path, monkeypatch, capsys, tty):
     monkeypatch.setattr(extract.getpass, "getpass", lambda prompt: PASSWORD)
     fake_get.reply = FakeResponse("login=abc123")
     extract.run_login(_args(tmp_path))
@@ -157,3 +164,32 @@ def test_read_login_code(tmp_path):
     assert extract.read_login_code(tmp_path / "loginfile") == "login=abc"
     with pytest.raises(SystemExit, match="stormdb-catalog login"):
         extract.read_login_code(tmp_path / "missing")
+
+
+def test_run_login_without_terminal_does_not_prompt(fake_get, tmp_path, monkeypatch):
+    monkeypatch.setattr(extract.sys, "stdin", io.StringIO(""))
+    monkeypatch.setattr(
+        extract.getpass, "getpass", lambda prompt: pytest.fail("prompted")
+    )
+    with pytest.raises(SystemExit, match="--password-stdin"):
+        extract.run_login(_args(tmp_path))
+    assert fake_get.calls == []
+
+
+def test_run_login_password_stdin(fake_get, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(extract.sys, "stdin", io.StringIO(PASSWORD + "\nignored\n"))
+    monkeypatch.setattr(
+        extract.getpass, "getpass", lambda prompt: pytest.fail("prompted")
+    )
+    fake_get.reply = FakeResponse("login=abc123")
+    extract.run_login(_args(tmp_path, password_stdin=True))
+    assert fake_get.calls == [URL + "login/username/alice/password/s3cret%26pw"]
+    assert (tmp_path / "loginfile").read_text() == "login=abc123"
+    assert PASSWORD not in capsys.readouterr().out
+
+
+def test_run_login_password_stdin_empty(fake_get, tmp_path, monkeypatch):
+    monkeypatch.setattr(extract.sys, "stdin", io.StringIO(""))
+    with pytest.raises(SystemExit, match="No password"):
+        extract.run_login(_args(tmp_path, password_stdin=True))
+    assert fake_get.calls == []
