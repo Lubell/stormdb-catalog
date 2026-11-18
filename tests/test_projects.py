@@ -1,6 +1,13 @@
 import math
 
-from stormdb_catalog.projects import parse_project_info, parse_project_list
+import pytest
+
+from stormdb_catalog.projects import (
+    clean_cookie,
+    is_login_page,
+    parse_project_info,
+    parse_project_list,
+)
 
 
 def test_parse_project_list(fixtures):
@@ -19,7 +26,6 @@ def test_parse_project_list(fixtures):
         "2020-12-31",
         "2019-06-01",
     )
-    assert [r["expired_style"] for r in rows] == [False, True, False]
 
 
 def test_parse_project_list_missing_values(fixtures):
@@ -31,14 +37,73 @@ def test_parse_project_list_missing_values(fixtures):
 
 def test_parse_project_info(fixtures):
     info = parse_project_info((fixtures / "projectinfo.html").read_text())
-    assert info["description"].startswith("MEG and MRI study of visual gamma")
-    assert info["human_data"] == "Yes"
-    assert info["anonymized"] == ""  # empty field must not swallow the next label
-    assert info["expired"] == "No"
-    assert info["esdh_journal"] == "1-10-72-1-15"
-    assert "missing_approvals" not in info
+    assert info["description"] == (
+        "MEG and MRI study of visual gamma oscillations in V1.\n"
+        "Healthy adults, passive viewing of gratings."
+    )
+    assert info["expired"] is True
+    assert info["data_type"] == "Human (Anomymized)"
+    assert (info["n_users_filesystem"], info["n_users_database"]) == (9, 2)
+    assert (info["disk_raw_mb"], info["disk_scratch_mb"], info["disk_aux_mb"]) == (
+        18602.0,
+        5036.0,
+        0.0,
+    )
     assert info["n_documents"] == 3
+    # rows from other panels (e.g. Subjects "Id: | Name:") are ignored
+    assert set(info) == {
+        "description",
+        "expired",
+        "data_type",
+        "n_users_filesystem",
+        "n_users_database",
+        "disk_raw_mb",
+        "disk_scratch_mb",
+        "disk_aux_mb",
+        "n_documents",
+    }
 
 
-def test_parse_project_info_without_documents():
-    assert parse_project_info("<p>Description:</p><p>x</p>")["n_documents"] is None
+def test_parse_project_info_no_description_not_expired():
+    html = """<div class="panel"><h3 class="panel-title">Project information</h3>
+    <table><tr><td>Data:</td><td>Animal</td></tr>
+    <tr><td>End date:</td><td></td></tr></table></div>"""
+    info = parse_project_info(html)
+    assert info == {
+        "description": "",
+        "expired": False,
+        "data_type": "Animal",
+        "n_documents": None,
+    }
+
+
+def test_parse_project_info_unexpected_page():
+    assert parse_project_info("<p>nothing here</p>") == {
+        "description": "",
+        "expired": False,
+        "n_documents": None,
+    }
+
+
+def test_login_page_detection():
+    assert is_login_page("<html><head><title>Login</title></head></html>")
+    assert not is_login_page("<html><head><title></title></head></html>")
+
+
+@pytest.mark.parametrize(
+    ("raw", "clean"),
+    [
+        ("PHPSESSID=abc123", "PHPSESSID=abc123"),
+        ("  Cookie: PHPSESSID=abc123; x=y \n", "PHPSESSID=abc123; x=y"),
+    ],
+)
+def test_clean_cookie(raw, clean):
+    assert clean_cookie(raw) == clean
+
+
+@pytest.mark.parametrize(
+    "raw", [None, "", "abc123def456", "\x1b[D\x1b[D\x1b[C\x1b[A\x1b[D", "a=b\x1b[D"]
+)
+def test_clean_cookie_rejects(raw):
+    with pytest.raises(SystemExit):
+        clean_cookie(raw)
