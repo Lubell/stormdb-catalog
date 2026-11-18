@@ -4,7 +4,10 @@ import pytest
 
 from stormdb_catalog.projects import (
     clean_cookie,
+    compare_project_lists,
+    format_changes,
     is_login_page,
+    parse_list_header,
     parse_project_info,
     parse_project_list,
 )
@@ -107,3 +110,72 @@ def test_clean_cookie(raw, clean):
 def test_clean_cookie_rejects(raw):
     with pytest.raises(SystemExit):
         clean_cookie(raw)
+
+
+def _anonymize_102_add_105_drop_103(html):
+    html = html.replace(
+        "<td>2011-11-11</td><td>Yes</td>", "<td>2011-11-11</td><td>No (anonymized)</td>"
+    )
+    html = html.replace("<td>103</td>", "<td>105</td>").replace("pd_motor", "new_proj")
+    return html
+
+
+def test_compare_project_lists(fixtures):
+    html = (fixtures / "listprojects.html").read_text()
+    stored = parse_project_list(html)
+    new_html = _anonymize_102_add_105_drop_103(html)
+    diff = compare_project_lists(
+        stored, parse_project_list(new_html), parse_list_header(new_html)
+    )
+    assert [r["project_id"] for r in diff["new"]] == [105]
+    assert [r["project_id"] for r in diff["removed"]] == [103]
+    [(row, diffs)] = diff["changed"]
+    assert row["project_id"] == 102
+    assert diffs == [("Human data", "Yes", "No (anonymized)")]
+    out = format_changes(diff)
+    assert "Human data: 'Yes' -> 'No (anonymized)'" in out
+    assert "105  new_proj" in out and "103  pd_motor" in out
+
+
+def test_compare_project_lists_labels_without_header(fixtures):
+    html = (fixtures / "listprojects.html").read_text()
+    stored = parse_project_list(html)
+    diff = compare_project_lists(
+        stored, parse_project_list(_anonymize_102_add_105_drop_103(html))
+    )
+    assert diff["changed"][0][1] == [("Human data", "Yes", "No (anonymized)")]
+
+
+def test_compare_project_lists_no_changes(fixtures):
+    rows = parse_project_list((fixtures / "listprojects.html").read_text())
+    assert (
+        format_changes(compare_project_lists(rows, rows))
+        == "No changes in the project list."
+    )
+
+
+def test_run_changes_is_read_only(fixtures, tmp_path, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    import pandas as pd
+    from conftest import FakeResponse
+
+    from stormdb_catalog import projects
+
+    html = (fixtures / "listprojects.html").read_text()
+    pd.DataFrame(parse_project_list(html)).to_csv(
+        tmp_path / "projects.csv", index=False
+    )
+    before = (tmp_path / "projects.csv").read_bytes()
+
+    class FakeSession:
+        def get(self, url, timeout=None):
+            assert url == projects.LIST_URL  # only the list page is fetched
+            return FakeResponse(_anonymize_102_add_105_drop_103(html))
+
+    monkeypatch.setattr(projects, "_session", lambda cookie: FakeSession())
+    projects.run_changes(SimpleNamespace(out=tmp_path, cookie="PHPSESSID=x"))
+    out = capsys.readouterr().out
+    assert "Changed (1):" in out and "No (anonymized)" in out
+    assert (tmp_path / "projects.csv").read_bytes() == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["projects.csv"]

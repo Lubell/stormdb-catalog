@@ -76,6 +76,12 @@ def build_parser():
     a.add_argument("--cookie", default=os.environ.get("STORMDB_COOKIE"))
     a.set_defaults(func=projects.run)
 
+    ch = sub.add_parser(
+        "changes", help="read-only: compare the live project list with projects.csv"
+    )
+    ch.add_argument("--cookie", default=os.environ.get("STORMDB_COOKIE"))
+    ch.set_defaults(func=projects.run_changes)
+
     b = sub.add_parser(
         "inventory", help="stage 2: series per project from the extract API"
     )
@@ -96,6 +102,9 @@ def build_parser():
     )
     d.add_argument("--text", help="regex on name + description")
     d.add_argument("--save", help="write results to this CSV")
+    d.add_argument("--table", action="store_true", help="one line per project")
+    d.add_argument("--full", action="store_true", help="show whole descriptions")
+    d.add_argument("--width", type=int, help="output width (default: terminal width)")
     d.set_defaults(func=query.run)
     return ap
 

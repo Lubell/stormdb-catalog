@@ -70,6 +70,81 @@ def parse_project_list(html):
     return rows
 
 
+# Fallback names for list columns, used when the page has no <th> header row.
+# Positions confirmed on the live page (2026-11-18); the others are unlabeled.
+LIST_COLUMN_FALLBACK = {
+    0: "Id",
+    1: "Name",
+    2: "Responsible",
+    3: "Institution",
+    4: "#Subjects",
+    5: "Start",
+    6: "End",
+    12: "Latest activity",
+    13: "Human data",
+    14: "Approvals",
+}
+
+
+def parse_list_header(html):
+    """Column labels from the first <th> row with at least 7 cells, else []."""
+    soup = BeautifulSoup(html, "html.parser")
+    for tr in soup.find_all("tr"):
+        ths = [th.get_text(" ", strip=True) for th in tr.find_all("th")]
+        if len(ths) >= 7:
+            return ths
+    return []
+
+
+def _label(header, i):
+    if i < len(header) and header[i]:
+        return header[i]
+    return LIST_COLUMN_FALLBACK.get(i, f"column {i + 1}")
+
+
+def compare_project_lists(stored, current, header=()):
+    """Diff two parsed project lists (dicts with project_id, name, raw_cells).
+
+    Returns {"new": [rows], "removed": [rows], "changed": [(row, [(label, old, new)])]},
+    matching projects by project_id (the name can change, and it is the join key).
+    """
+    old = {int(r["project_id"]): r for r in stored}
+    new = {int(r["project_id"]): r for r in current}
+    changed = []
+    for pid in sorted(old.keys() & new.keys()):
+        a, b = json.loads(old[pid]["raw_cells"]), json.loads(new[pid]["raw_cells"])
+        diffs = [
+            (_label(header, i), x, y)
+            for i, (x, y) in enumerate(
+                zip(a + [""] * (len(b) - len(a)), b + [""] * (len(a) - len(b)))
+            )
+            if x != y
+        ]
+        if diffs:
+            changed.append((new[pid], diffs))
+    return {
+        "new": [new[pid] for pid in sorted(new.keys() - old.keys())],
+        "removed": [old[pid] for pid in sorted(old.keys() - new.keys())],
+        "changed": changed,
+    }
+
+
+def format_changes(diff):
+    lines = []
+    for title, key in (("New projects", "new"), ("Removed from the list", "removed")):
+        if diff[key]:
+            lines.append(f"{title} ({len(diff[key])}):")
+            lines += [f"  {r['project_id']:>4}  {r['name']}" for r in diff[key]]
+    if diff["changed"]:
+        lines.append(f"Changed ({len(diff['changed'])}):")
+        for r, diffs in diff["changed"]:
+            lines.append(f"  {r['project_id']:>4}  {r['name']}")
+            lines += [
+                f"          {label}: {old!r} -> {new!r}" for label, old, new in diffs
+            ]
+    return "\n".join(lines) or "No changes in the project list."
+
+
 def _mb(text):
     m = re.match(r"\s*([\d,.]+)\s*Mb", text)
     return float(m.group(1).replace(",", "")) if m else None
@@ -122,8 +197,8 @@ def parse_project_info(html):
     return out
 
 
-def run(args):
-    s = _session(args.cookie)
+def fetch_project_list(s, out):
+    """Fetch and parse the admin project list; returns (rows, header)."""
     r = s.get(LIST_URL, timeout=60)
     r.raise_for_status()
     if is_login_page(r.text):
@@ -133,10 +208,28 @@ def run(args):
         )
     projects = parse_project_list(r.text)
     if not projects:
-        (args.out / "listprojects_debug.html").write_text(r.text)
+        (out / "listprojects_debug.html").write_text(r.text)
         sys.exit(
             "Parsed 0 projects; saved listprojects_debug.html for inspection (HTML layout changed?)."
         )
+    return projects, parse_list_header(r.text)
+
+
+def run_changes(args):
+    """Read-only: compare the live project list with the stored projects.csv."""
+    path = args.out / "projects.csv"
+    if not path.exists():
+        sys.exit(f"{path} not found; run the projects stage first.")
+    stored = pd.read_csv(path, usecols=["project_id", "name", "raw_cells"]).to_dict(
+        "records"
+    )
+    current, header = fetch_project_list(_session(args.cookie), args.out)
+    print(format_changes(compare_project_lists(stored, current, header)))
+
+
+def run(args):
+    s = _session(args.cookie)
+    projects, _ = fetch_project_list(s, args.out)
     print(f"{len(projects)} projects in list; fetching info pages...")
     for i, p in enumerate(projects, 1):
         try:
